@@ -16,7 +16,7 @@ Open up the link and you're ready to start.
 
 ## Credits
 
-I saw this first [here](https://twitter.com/nicolasdnl/status/1749715070928433161), but it appears to be a much older idea. There's some more information on the history in the [Hacknernews discussion](https://news.ycombinator.com/item?id=39159418).
+I saw this first [here](https://github.com/vnglst/pong-wars) and [here](https://twitter.com/nicolasdnl/status/1749715070928433161), but it appears to be a much older idea. There's some more information on the history in the [Hacknernews discussion](https://news.ycombinator.com/item?id=39159418).
 
 The colors are based on the Mindful Palette by [Alex Cristache](https://twitter.com/AlexCristache/status/1738610343499157872).
 

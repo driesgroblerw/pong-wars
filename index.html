@@ -35,6 +35,30 @@
       height: 100%;
     }
 
+    /* Top bar used to house controls in fullscreen and normal mode */
+    #topBar {
+      position: relative;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 12px;
+      box-sizing: border-box;
+    }
+
+    /* When container is fullscreen we want a fixed top bar */
+    .fs-topbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(6px);
+      padding: 8px 12px;
+    }
+
     canvas {
       display: block;
       border-radius: 4px;
@@ -42,6 +66,14 @@
       width: 100%;
       margin-top: auto;
       box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Full-bleed canvas when fullscreen: remove border radius and shadow */
+    .fs-canvas {
+      width: 100vw !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
     }
 
     #score {
@@ -69,10 +101,33 @@
 
 <body>
   <div id="container">
-    <canvas id="pongCanvas" width="600" height="600"></canvas>
-    <div style="margin-top: 12px; display:flex; gap:8px;">
-      <button id="fullscreenBtn" type="button">Toggle fullscreen</button>
+    <div id="topBar">
+      <div id="controls" style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:center;">
+        <div style="display:flex; gap:6px; align-items:center;">
+          <button id="speedDown" type="button">- Speed</button>
+          <button id="speedUp" type="button">+ Speed</button>
+        </div>
+        <label style="display:flex; gap:6px; align-items:center;">
+          <input id="effectsToggle" type="checkbox" checked>
+          Effects
+        </label>
+        <label style="display:flex; gap:8px; align-items:center;">
+          Block size
+          <input id="blockSize" type="range" min="4" max="40" value="10">
+        </label>
+        <label style="display:flex; gap:8px; align-items:center;">
+          Day
+          <input id="dayColor" type="color" value="#D9E8E3">
+        </label>
+        <label style="display:flex; gap:8px; align-items:center;">
+          Night
+          <input id="nightColor" type="color" value="#172B36">
+        </label>
+        <button id="pauseBtn" type="button">Pause</button>
+        <button id="fullscreenBtn" type="button">Toggle fullscreen</button>
+      </div>
     </div>
+    <canvas id="pongCanvas" width="600" height="600"></canvas>
     <div id="score"></div>
     <p id="made">
       made by
@@ -95,22 +150,58 @@
     OceanicNoir: "#172B36",
   };
 
+  // Ripples for collision after-effects (timed, easing, fill)
+  const ripples = [];
+  let showEffects = true;
+
+  function createRipple(x, y, color) {
+    if (!showEffects) return;
+    const startR = Math.max(4, (typeof SQUARE_SIZE === 'number' ? SQUARE_SIZE : 10) / 2);
+    const maxR = Math.max(24, (typeof SQUARE_SIZE === 'number' ? SQUARE_SIZE : 10) * 6);
+    const duration = 600 + Math.random() * 300; // milliseconds
+    ripples.push({ x, y, startR, maxR, duration, elapsed: 0, color });
+    if (ripples.length > 300) ripples.shift();
+  }
+
+  // Helper: hex color to rgba string with alpha
+  function hexWithAlpha(hex, alpha) {
+    if (!hex) return `rgba(255,255,255,${alpha})`;
+    const trimmed = hex.replace('#', '');
+    const bigint = parseInt(trimmed, 16);
+    const r = (bigint >> 16) & 255;
+    const g = (bigint >> 8) & 255;
+    const b = bigint & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
   const canvas = document.getElementById("pongCanvas");
   const ctx = canvas.getContext("2d");
   const fullscreenBtn = document.getElementById("fullscreenBtn");
   const scoreElement = document.getElementById("score");
+  const speedUpBtn = document.getElementById('speedUp');
+  const speedDownBtn = document.getElementById('speedDown');
+  const blockSizeInput = document.getElementById('blockSize');
+  const dayColorInput = document.getElementById('dayColor');
+  const nightColorInput = document.getElementById('nightColor');
+  const container = document.getElementById('container');
+  const controlsEl = document.getElementById('controls');
 
-  const DAY_COLOR = colorPalette.MysticMint;
-  const DAY_BALL_COLOR = colorPalette.NocturnalExpedition;
-  const NIGHT_COLOR = colorPalette.NocturnalExpedition;
-  const NIGHT_BALL_COLOR = colorPalette.MysticMint;
-  const SQUARE_SIZE = 10;
+  let DAY_COLOR = colorPalette.MysticMint;
+  let DAY_BALL_COLOR = colorPalette.NocturnalExpedition;
+  let NIGHT_COLOR = colorPalette.NocturnalExpedition;
+  let NIGHT_BALL_COLOR = colorPalette.MysticMint;
+  let SQUARE_SIZE = 10;
   const MIN_SPEED = 5;
   const MAX_SPEED = 10;
 
-  // numSquares depend on current canvas size and are recalculated on resize
-  let numSquaresX = Math.floor(canvas.width / SQUARE_SIZE);
-  let numSquaresY = Math.floor(canvas.height / SQUARE_SIZE);
+  // device pixel ratio and logical (CSS) canvas size
+  let dpr = Math.max(1, window.devicePixelRatio || 1);
+  let logicalWidth = Math.floor(canvas.width / dpr) || 600;
+  let logicalHeight = Math.floor(canvas.height / dpr) || 600;
+
+  // numSquares depend on current logical (CSS) canvas size and are recalculated on resize
+  let numSquaresX = Math.floor(logicalWidth / SQUARE_SIZE);
+  let numSquaresY = Math.floor(logicalHeight / SQUARE_SIZE);
 
   let dayScore = 0;
   let nightScore = 0;
@@ -118,8 +209,8 @@
   let squares = [];
 
   function initializeSquares() {
-    numSquaresX = Math.max(2, Math.floor(canvas.width / SQUARE_SIZE));
-    numSquaresY = Math.max(2, Math.floor(canvas.height / SQUARE_SIZE));
+    numSquaresX = Math.max(2, Math.floor(logicalWidth / SQUARE_SIZE));
+    numSquaresY = Math.max(2, Math.floor(logicalHeight / SQUARE_SIZE));
     squares = [];
     for (let i = 0; i < numSquaresX; i++) {
       squares[i] = [];
@@ -131,16 +222,16 @@
 
   const balls = [
     {
-      x: canvas.width / 4,
-      y: canvas.height / 2,
+      x: logicalWidth / 4,
+      y: logicalHeight / 2,
       dx: 8,
       dy: -8,
       reverseColor: DAY_COLOR,
       ballColor: DAY_BALL_COLOR,
     },
     {
-      x: (canvas.width / 4) * 3,
-      y: canvas.height / 2,
+      x: (logicalWidth / 4) * 3,
+      y: logicalHeight / 2,
       dx: -8,
       dy: 8,
       reverseColor: NIGHT_COLOR,
@@ -149,29 +240,39 @@
   ];
 
   function resizeCanvas(scaleBalls = true) {
-    const oldWidth = canvas.width;
-    const oldHeight = canvas.height;
+    const oldWidth = canvas.width || 600;
+    const oldHeight = canvas.height || 600;
 
-    // If element is fullscreen use viewport size, otherwise use container/client size
-    if (document.fullscreenElement === canvas) {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      // make canvas fill the screen visually
-      canvas.style.width = '100vw';
-      canvas.style.height = '100vh';
+    // desired CSS size (logical pixels)
+    let cssWidth, cssHeight;
+    if (document.fullscreenElement) {
+      cssWidth = window.innerWidth;
+      const topBar = document.getElementById('topBar');
+      const topH = topBar ? topBar.clientHeight : 0;
+      cssHeight = Math.max(100, window.innerHeight - topH);
     } else {
-      // Reset css sizing so it matches container width (CSS already sets width:100%)
-      canvas.style.width = '';
-      canvas.style.height = '';
-      canvas.width = Math.floor(canvas.clientWidth || 600);
-      // Keep square canvas if possible by using clientWidth for both dims
-      canvas.height = Math.floor(canvas.clientWidth || 600);
+      cssWidth = Math.floor(canvas.clientWidth || 600);
+      cssHeight = Math.floor(canvas.clientWidth || 600);
     }
 
-    // Scale ball positions proportionally to new size to avoid jumps
+    // update global dpr and logical sizes
+    dpr = Math.max(1, window.devicePixelRatio || 1);
+    logicalWidth = cssWidth;
+    logicalHeight = cssHeight;
+
+    // set canvas pixel dimensions and scale context
+    canvas.style.width = logicalWidth + 'px';
+    canvas.style.height = logicalHeight + 'px';
+    canvas.width = Math.floor(logicalWidth * dpr);
+    canvas.height = Math.floor(logicalHeight * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // Scale ball positions proportionally to new logical size to avoid jumps
     if (scaleBalls && oldWidth && oldHeight) {
-      const scaleX = canvas.width / oldWidth;
-      const scaleY = canvas.height / oldHeight;
+      const oldLogicalW = Math.floor(oldWidth / (window.devicePixelRatio || 1));
+      const oldLogicalH = Math.floor(oldHeight / (window.devicePixelRatio || 1));
+      const scaleX = logicalWidth / (oldLogicalW || logicalWidth);
+      const scaleY = logicalHeight / (oldLogicalH || logicalHeight);
       balls.forEach((b) => {
         b.x = b.x * scaleX;
         b.y = b.y * scaleY;
@@ -181,7 +282,20 @@
     initializeSquares();
   }
 
+  // Update squares colors from current color variables
+  function applyColorsToSquares() {
+    for (let i = 0; i < numSquaresX; i++) {
+      for (let j = 0; j < numSquaresY; j++) {
+        squares[i][j] = i < numSquaresX / 2 ? DAY_COLOR : NIGHT_COLOR;
+      }
+    }
+    // update ball colors
+    if (balls[0]) balls[0].ballColor = DAY_BALL_COLOR;
+    if (balls[1]) balls[1].ballColor = NIGHT_BALL_COLOR;
+  }
+
   let iteration = 0;
+  let paused = false;
 
   function drawBall(ball) {
     ctx.beginPath();
@@ -224,8 +338,10 @@
           // Determine bounce direction based on the angle
           if (Math.abs(Math.cos(angle)) > Math.abs(Math.sin(angle))) {
             ball.dx = -ball.dx;
+            createRipple(ball.x, ball.y, ball.ballColor);
           } else {
             ball.dy = -ball.dy;
+            createRipple(ball.x, ball.y, ball.ballColor);
           }
         }
       }
@@ -233,11 +349,13 @@
   }
 
   function checkBoundaryCollision(ball) {
-    if (ball.x + ball.dx > canvas.width - SQUARE_SIZE / 2 || ball.x + ball.dx < SQUARE_SIZE / 2) {
+    if (ball.x + ball.dx > logicalWidth - SQUARE_SIZE / 2 || ball.x + ball.dx < SQUARE_SIZE / 2) {
       ball.dx = -ball.dx;
+      createRipple(ball.x, ball.y, ball.ballColor);
     }
-    if (ball.y + ball.dy > canvas.height - SQUARE_SIZE / 2 || ball.y + ball.dy < SQUARE_SIZE / 2) {
+    if (ball.y + ball.dy > logicalHeight - SQUARE_SIZE / 2 || ball.y + ball.dy < SQUARE_SIZE / 2) {
       ball.dy = -ball.dy;
+      createRipple(ball.x, ball.y, ball.ballColor);
     }
   }
 
@@ -255,7 +373,17 @@
   }
 
   function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, logicalWidth, logicalHeight);
+    if (paused) {
+      // still draw existing scene but don't update game state; show overlay
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, 0, logicalWidth, logicalHeight);
+      ctx.fillStyle = '#fff';
+      ctx.font = '28px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('PAUSED', logicalWidth / 2, logicalHeight / 2);
+      return;
+    }
     drawSquares();
 
     scoreElement.textContent = `day ${dayScore} | night ${nightScore}`;
@@ -270,6 +398,28 @@
       addRandomness(ball);
     });
 
+    // Update and draw ripples (timed filled radial gradients with easing)
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const p = ripples[i];
+      // time progression (approx based on frame rate)
+      p.elapsed += 1000 / FRAME_RATE;
+      const t = Math.min(1, p.elapsed / p.duration);
+      const e = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      const r = p.startR + (p.maxR - p.startR) * e;
+
+      // build gradient
+      const grad = ctx.createRadialGradient(p.x, p.y, Math.max(1, r * 0.05), p.x, p.y, r);
+      grad.addColorStop(0, hexWithAlpha(p.color || '#ffffff', 0.6 * (1 - e)));
+      grad.addColorStop(1, hexWithAlpha(p.color || '#ffffff', 0));
+      ctx.beginPath();
+      ctx.fillStyle = grad;
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.closePath();
+
+      if (t >= 1) ripples.splice(i, 1);
+    }
+
     iteration++;
     if (iteration % 1_000 === 0) console.log("iteration", iteration);
   }
@@ -280,11 +430,11 @@
   // Fullscreen toggle and resize handling
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
-      // Request fullscreen for the canvas element
-      if (canvas.requestFullscreen) {
-        canvas.requestFullscreen();
-      } else if (canvas.webkitRequestFullscreen) {
-        canvas.webkitRequestFullscreen();
+      const target = document.documentElement || container;
+      if (target.requestFullscreen) {
+        target.requestFullscreen();
+      } else if (target.webkitRequestFullscreen) {
+        target.webkitRequestFullscreen();
       }
     } else {
       if (document.exitFullscreen) {
@@ -295,8 +445,19 @@
     }
   }
 
-  // When fullscreen state changes, resize the canvas
-  document.addEventListener('fullscreenchange', () => resizeCanvas(true));
+  // When fullscreen state changes, update UI and resize the canvas
+  document.addEventListener('fullscreenchange', () => {
+    const isFs = !!document.fullscreenElement;
+    const topBar = document.getElementById('topBar');
+    if (isFs) {
+      if (topBar) topBar.classList.add('fs-topbar');
+      canvas.classList.add('fs-canvas');
+    } else {
+      if (topBar) topBar.classList.remove('fs-topbar');
+      canvas.classList.remove('fs-canvas');
+    }
+    resizeCanvas(true);
+  });
 
   // Resize when the window changes size (not in fullscreen)
   window.addEventListener('resize', () => resizeCanvas(true));
@@ -304,6 +465,80 @@
   // Double click canvas to toggle fullscreen
   canvas.addEventListener('dblclick', toggleFullscreen);
   fullscreenBtn.addEventListener('click', toggleFullscreen);
+  // Speed controls: increase/decrease velocities by 10%
+  if (speedUpBtn) speedUpBtn.addEventListener('click', () => {
+    balls.forEach(b => {
+      b.dx *= 1.1;
+      b.dy *= 1.1;
+    });
+  });
+  if (speedDownBtn) speedDownBtn.addEventListener('click', () => {
+    balls.forEach(b => {
+      b.dx *= 0.9;
+      b.dy *= 0.9;
+    });
+  });
+
+  // Pause button
+  const pauseBtn = document.getElementById('pauseBtn');
+  if (pauseBtn) pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause';
+  });
+
+  // Block size control: update grid size and clamp balls to canvas so they don't disappear
+  if (blockSizeInput) blockSizeInput.addEventListener('input', (e) => {
+    const newSize = parseInt(e.target.value, 10) || 10;
+    const oldSize = SQUARE_SIZE;
+    if (newSize === oldSize) return;
+    SQUARE_SIZE = newSize;
+    initializeSquares();
+    applyColorsToSquares();
+    // Smoothly reposition balls back into visible bounds over 300ms
+    const duration = 300;
+    const start = performance.now();
+    const starts = balls.map(b => ({ x: b.x, y: b.y }));
+    const targets = balls.map(b => ({
+      x: Math.min(Math.max(b.x, SQUARE_SIZE / 2), logicalWidth - SQUARE_SIZE / 2),
+      y: Math.min(Math.max(b.y, SQUARE_SIZE / 2), logicalHeight - SQUARE_SIZE / 2)
+    }));
+    function animate() {
+      const now = performance.now();
+      const t = Math.min(1, (now - start) / duration);
+      const e = 1 - Math.pow(1 - t, 3);
+      balls.forEach((b, idx) => {
+        b.x = starts[idx].x + (targets[idx].x - starts[idx].x) * e;
+        b.y = starts[idx].y + (targets[idx].y - starts[idx].y) * e;
+      });
+      if (t < 1) requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+    // update existing ripples initial radius to new size heuristic
+    ripples.forEach(r => {
+      r.startR = Math.max(4, SQUARE_SIZE / 2);
+      r.maxR = Math.max(24, SQUARE_SIZE * 6);
+    });
+  });
+
+  // Effects toggle
+  const effectsToggle = document.getElementById('effectsToggle');
+  if (effectsToggle) effectsToggle.addEventListener('change', (e) => {
+    showEffects = !!e.target.checked;
+    if (!showEffects) ripples.length = 0;
+  });
+
+  // Color pickers
+  if (dayColorInput) dayColorInput.addEventListener('input', (e) => {
+    DAY_COLOR = e.target.value;
+    // keep ball colors contrasting
+    DAY_BALL_COLOR = NIGHT_COLOR;
+    applyColorsToSquares();
+  });
+  if (nightColorInput) nightColorInput.addEventListener('input', (e) => {
+    NIGHT_COLOR = e.target.value;
+    NIGHT_BALL_COLOR = DAY_COLOR;
+    applyColorsToSquares();
+  });
 
   // Initialize sizes and grid on load
   // Use a small timeout to allow styles/layout to settle
