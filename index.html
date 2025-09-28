@@ -47,6 +47,35 @@
       box-sizing: border-box;
     }
 
+    /* Modern button styles */
+    button {
+      appearance: none;
+      -webkit-appearance: none;
+      border: none;
+      background: linear-gradient(180deg, #ffffff 0%, #f3f4f6 100%);
+      color: #172b36;
+      padding: 8px 12px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(16,24,40,0.06), inset 0 -1px 0 rgba(255,255,255,0.6);
+      cursor: pointer;
+      font-family: monospace;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(16,24,40,0.08);
+    }
+    button:active {
+      transform: translateY(0);
+      box-shadow: 0 3px 8px rgba(16,24,40,0.06);
+    }
+    button:focus {
+      outline: 2px solid rgba(33,150,243,0.18);
+      outline-offset: 2px;
+    }
+    input[type="range"] { height: 28px; }
+    input[type="color"] { width: 36px; height: 28px; border-radius: 6px; border: none; padding:0; }
+
     /* When container is fullscreen we want a fixed top bar */
     .fs-topbar {
       position: fixed;
@@ -123,8 +152,9 @@
           Night
           <input id="nightColor" type="color" value="#172B36">
         </label>
-        <button id="pauseBtn" type="button">Pause</button>
-        <button id="fullscreenBtn" type="button">Toggle fullscreen</button>
+  <button id="pauseBtn" type="button">Pause</button>
+  <button id="resetBtn" type="button">Reset</button>
+  <button id="fullscreenBtn" type="button">Toggle fullscreen</button>
       </div>
     </div>
     <canvas id="pongCanvas" width="600" height="600"></canvas>
@@ -485,6 +515,39 @@
     paused = !paused;
     pauseBtn.textContent = paused ? 'Resume' : 'Pause';
   });
+
+  // Reset button
+  const resetBtn = document.getElementById('resetBtn');
+  function resetGame() {
+    // reset UI
+    SQUARE_SIZE = parseInt(blockSizeInput.value, 10) || 10;
+    initializeSquares();
+    applyColorsToSquares();
+    // reset scores
+    dayScore = 0;
+    nightScore = 0;
+    // reset balls to centered positions and default speeds
+    balls[0].x = logicalWidth / 4;
+    balls[0].y = logicalHeight / 2;
+    balls[0].dx = Math.abs(balls[0].dx) || 8;
+    balls[0].dy = -(Math.abs(balls[0].dy) || 8);
+    balls[0].reverseColor = DAY_COLOR;
+    balls[0].ballColor = DAY_BALL_COLOR;
+
+    balls[1].x = (logicalWidth / 4) * 3;
+    balls[1].y = logicalHeight / 2;
+    balls[1].dx = -(Math.abs(balls[1].dx) || -8);
+    balls[1].dy = Math.abs(balls[1].dy) || 8;
+    balls[1].reverseColor = NIGHT_COLOR;
+    balls[1].ballColor = NIGHT_BALL_COLOR;
+
+    // clear ripples
+    ripples.length = 0;
+    // unpause
+    paused = false;
+    if (pauseBtn) pauseBtn.textContent = 'Pause';
+  }
+  if (resetBtn) resetBtn.addEventListener('click', resetGame);
 
   // Block size control: update grid size and clamp balls to canvas so they don't disappear
   if (blockSizeInput) blockSizeInput.addEventListener('input', (e) => {

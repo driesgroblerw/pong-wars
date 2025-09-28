@@ -1,5 +1,14 @@
 # Pong Wars
 
+## Game modes
+
+- Effects: visual collision ripples. Toggle with the "Effects" checkbox in the top controls. Disable to improve performance on low-end devices.
+- Pause: pause and resume the game with the "Pause" button. When paused the game stops updating and a "PAUSED" overlay is shown.
+- Fullscreen: click "Toggle fullscreen" or double-click the canvas to enter fullscreen. Controls remain visible in a top bar.
+- Block size: adjust the grid block size with the slider. Balls will smoothly reposition to remain visible.
+
+# Pong Wars
+
 It's the eternal battle between day and night, good and bad. Written in JavaScript with some HTML & CSS in one index.html. Feel free to reuse the code and create your own version.
 
 https://github.com/vnglst/pong-wars/assets/3457693/4eae12fa-bdc1-49ee-8b39-c94deb7cb2c8
@@ -28,6 +37,7 @@ I love getting feedback and PRs with improvements for this, but I also want to k
 
 - Original post on Mastodon: https://hachyderm.io/@vnglst/111828811496422610
 - On Twitter: https://twitter.com/vnglst/status/1751278052154179770
+- I saw it on Threads: https://www.threads.com/@denicmarko_/post/DPJTmo6EW88
 
 ## Alternate version
 
